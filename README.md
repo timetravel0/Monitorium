@@ -29,7 +29,6 @@ Ensure you have the following dependencies installed:
 
 ### Clone the repository:
 
-```bash
 git clone https://github.com/timetravel0/Monitorium.git
 cd monitorium
 
