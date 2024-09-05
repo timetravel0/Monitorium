@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Dashboard</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script>
+        var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+        socket.on('update_received', function() {
+            location.reload();  // Refresh the page when an update is received
+        });
+
+		function showDetails(title, details) {
+			document.getElementById('modalTitle').innerText = title;
+			const tableBody = document.getElementById('modalBody');
+			tableBody.innerHTML = ''; // Clear previous content
+
+			let detailArray;
+
+			try {
+				detailArray = JSON.parse(details);
+			} catch (e) {
+				console.error("Failed to parse details:", e);
+				detailArray = details; // If parsing fails, use the details as is
+			}
+
+			// Check if detailArray is an array or an object
+			if (Array.isArray(detailArray)) {
+				detailArray.forEach((item, index) => {
+					const row = document.createElement('tr');
+					row.className = index % 2 === 0 ? 'table-light' : 'table-secondary';
+					const cell = document.createElement('td');
+					cell.colSpan = 2;
+					cell.innerText = item;
+					row.appendChild(cell);
+					tableBody.appendChild(row);
+				});
+			} else if (typeof detailArray === 'object' && detailArray !== null) {
+				Object.entries(detailArray).forEach(([key, value], index) => {
+					const row = document.createElement('tr');
+					row.className = index % 2 === 0 ? 'table-light' : 'table-secondary';
+					const keyCell = document.createElement('th');
+					keyCell.innerText = key;
+					const valueCell = document.createElement('td');
+					valueCell.innerText = value;
+					row.appendChild(keyCell);
+					row.appendChild(valueCell);
+					tableBody.appendChild(row);
+				});
+			} else {
+				// Handle case where details is a simple string or other types
+				const row = document.createElement('tr');
+				const cell = document.createElement('td');
+				cell.colSpan = 2;
+				cell.innerText = detailArray;
+				row.appendChild(cell);
+				tableBody.appendChild(row);
+			}
+
+			var myModal = new bootstrap.Modal(document.getElementById('detailsModal'));
+			myModal.show();
+		}
+
+
+        function performAction(macAddress, action) {
+            fetch('/action', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ mac_address: macAddress, action: action })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    console.log(`${action.charAt(0).toUpperCase() + action.slice(1)} requested for client: ${macAddress}`);
+                } else {
+                    console.error(`Failed to perform ${action} for client: ${macAddress}. Reason: ${data.reason}`);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+		
+		function requestUpdate(macAddress, button) {
+			const spinner = document.createElement('span');
+			spinner.classList.add('spinner-border', 'spinner-border-sm', 'ms-2');
+			spinner.setAttribute('role', 'status');
+			spinner.setAttribute('aria-hidden', 'true');
+
+			// Append the spinner next to the button
+			button.appendChild(spinner);
+
+			fetch('/request-update', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ mac_address: macAddress })
+			})
+			.then(response => response.json())
+			.then(data => {
+				// Remove the spinner after the request is done
+				spinner.remove();
+
+				if (data.status === 'update-requested') {
+					// Update was successful, maybe do something here if needed
+					console.log('Update requested for client:', macAddress);
+				} else {
+					// Show error alert if the update failed
+					alert('Failed to request update for client: ' + macAddress);
+				}
+			})
+			.catch(error => {
+				// Remove the spinner and show error if the request fails
+				spinner.remove();
+				alert('Error requesting update for client: ' + macAddress);
+				console.error('Error:', error);
+			});
+		}
+		
+    </script>
+    <style>
+        .table-wrapper {
+            width: 100%;
+        }
+
+        .table {
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        .modal-content {
+            max-width: 100%;
+        }
+
+        .modal-body {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .modal-content table {
+            width: 100%;
+            table-layout: auto;
+        }
+
+        .modal-content th, .modal-content td {
+            word-wrap: break-word;
+        }
+
+        .modal-content pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <h1 class="my-4">Network Dashboard</h1>
+        <div class="table-wrapper">
+            <table class="table table-bordered table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Hostname</th>
+                        <th>Local IP Address</th>
+                        <th>Platform</th>
+                        <th>CPU Usage (%)</th>
+                        <th>Memory Usage (%)</th>
+                        <th>HDD Usage (Total/Used/Free in GB, %)</th>
+                        <th>Uptime</th>
+                        <th>Current Users</th>
+                        <th>Processes</th>
+                        <th>Used Ports</th>
+                        <th>Last Updated</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pc in pc_info %}
+    <tr onclick="showDetails('Details for {{ pc.hostname }}', JSON.stringify({
+            'MAC Address': '{{ pc.mac_address }}',
+            'Public IP Address': '{{ pc.public_ip_address }}',
+            'Disk I/O (Read/Write in KB)': '{{ pc.disk_io_read_bytes // 1024 }} / {{ pc.disk_io_write_bytes // 1024 }}',
+            'Network I/O (Sent/Received in KB)': '{{ pc.net_io_bytes_sent // 1024 }} / {{ pc.net_io_bytes_recv // 1024 }}',
+            'Last Reboot': '{{ pc.last_reboot }}'
+        }))">                        <td>{{ pc.hostname }}</td>
+                        <td>{{ pc.local_ip_address }}</td>
+                        <td>{{ pc.platform }}</td>
+                        <td>{{ pc.cpu_usage }}</td>
+                        <td>{{ pc.memory_usage }}</td>
+                        <td>{{ pc.hdd_total }} / {{ pc.hdd_used }} / {{ pc.hdd_free }} ({{ pc.hdd_percent }}%)</td>
+                        <td>{{ pc.uptime }}</td>
+                        <td><pre>{{ pc.current_users }}</pre></td>
+						<td>
+							<button class="btn btn-info btn-sm" onclick="event.stopPropagation(); showDetails('Processes ({{ pc.running_processes|length }})', `{{ pc.running_processes }}`)">
+								Show ({{ pc.running_processes|length }})
+							</button>
+						</td>
+						<td>
+							<button class="btn btn-info btn-sm" onclick="event.stopPropagation(); showDetails('Used Ports ({{ pc.used_ports|length }})', `{{ pc.used_ports }}`)">
+								Show ({{ pc.used_ports|length }})
+							</button>
+						</td>
+						<td>{{ pc.last_updated }}</td>
+						<td>
+							<!-- Update button with Bootstrap icon -->
+							<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); requestUpdate('{{ pc.mac_address }}', this)">
+								<i class="bi bi-arrow-clockwise"></i> <!-- Bootstrap "arrow-clockwise" icon -->
+							</button>
+
+							<!-- Reboot button with Bootstrap icon -->
+							<button class="btn btn-warning btn-sm" onclick="event.stopPropagation(); performAction('{{ pc.mac_address }}', 'reboot')">
+								<i class="bi bi-arrow-repeat"></i> <!-- Bootstrap "arrow-repeat" icon -->
+							</button>
+
+							<!-- Shutdown button with Bootstrap icon -->
+							<button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); performAction('{{ pc.mac_address }}', 'shutdown')">
+								<i class="bi bi-power"></i> <!-- Bootstrap "power" icon -->
+							</button>
+						</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <table class="table">
+                        <tbody id="modalBody">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
