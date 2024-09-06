@@ -10,6 +10,7 @@ Lightweight, real-time system and network monitoring tool. It features a client-
 - Detailed process and port information.
 - Customizable update intervals.
 - Built with Flask, Socket.IO, and SQLite.
+- Client automatically updated on each probe if a new version is available
 
 ## Getting Started
 
@@ -45,7 +46,7 @@ This will start the Flask server for the dashboard.
 On the target machine you want to monitor, run:
 
 ```bash
-python probe.py
+python launcher.py
 ```
 
 The client will discover the server automatically and begin sending system metrics.
