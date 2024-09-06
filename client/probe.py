@@ -12,6 +12,8 @@ from flask import Flask, request, jsonify
 from getmac import get_mac_address as gma
 from threading import Thread
 
+## I AM NEWER VERSION
+
 # List of external packages to ensure they are installed
 required_packages = [
     "psutil",
@@ -31,6 +33,7 @@ for package in required_packages:
         install(package)
 
 app = Flask(__name__)
+SERVER_URL = "http://127.0.0.1:8080/update"
 
 def discover_server_ip():
     DISCOVERY_PORT = 5002  # Same port as server listens on for discovery
@@ -228,7 +231,7 @@ def send_data_to_server(data):
         print(f"Error sending data to server: {e}")
 
 def run_probe():
-    while True:
+    while True:    
         data = get_system_info()
         send_data_to_server(data)
         time.sleep(300)  # Wait for 5 minutes before sending the next update
