@@ -4,11 +4,26 @@ import time
 import requests
 import socket
 import subprocess
+import signal
 
 VERSION_FILE = "version.txt"
 server_ip = "127.0.0.1"
 TEMP_PROBE_FILE = "probe_new.py"  # Temporary file for the new version
 probe_process = None  # Global variable to store the probe process
+shutdown_flag = False  # Flag to indicate shutdown
+
+
+# Function to handle shutdown signals
+def handle_shutdown(signal, frame):
+    global shutdown_flag
+    shutdown_flag = True
+    print("Received shutdown signal. Stopping probe...")
+    stop_probe()  # Stop the probe process properly
+    sys.exit(0)
+
+# Register signal handlers
+signal.signal(signal.SIGINT, handle_shutdown)
+signal.signal(signal.SIGTERM, handle_shutdown)
 
 
 # Read the current version from version.txt
@@ -26,6 +41,7 @@ def set_current_version(version):
         file.write(version)
 
 
+# Discover server IP
 def discover_server_ip():
     DISCOVERY_PORT = 5002  # Same port as server listens on for discovery
     DISCOVERY_MESSAGE = "DISCOVER_SERVER"
@@ -50,6 +66,7 @@ def discover_server_ip():
             return None
 
 
+# Check for updates
 def check_for_updates():
     try:
         response = requests.get(f"http://{server_ip}:8080/latest-version")
@@ -96,7 +113,7 @@ def start_probe():
     probe_process = subprocess.Popen([sys.executable, "probe.py"])
 
 
-# Stop the running probe process
+# Stop the running probe process and clean up
 def stop_probe():
     global probe_process
     if probe_process:
@@ -132,7 +149,7 @@ def run_probe():
     # Start the probe initially
     start_probe()
 
-    while True:
+    while not shutdown_flag:
         new_version = check_for_updates()
         if new_version:
             if download_new_version():

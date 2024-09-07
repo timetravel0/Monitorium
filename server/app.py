@@ -32,11 +32,26 @@ for package in required_packages:
 app = Flask(__name__)
 socketio = SocketIO(app)
 
+LATEST_VERSION = "1.0.1"  # Update this when you release a new version
 DATABASE_PATH = 'local_data.db'
 CLIENT_PORT = 5001  # The port where the client Flask server listens
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
+
+@app.route('/latest-version', methods=['GET'])
+def get_latest_version():
+    return jsonify({"latest_version": LATEST_VERSION}), 200
+
+@app.route('/download-probe', methods=['GET'])
+def download_probe():
+    try:
+        with open('probe.py', 'r') as file:
+            probe_code = file.read()
+        return jsonify({"probe_code": probe_code}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 def handle_discovery_requests():
     DISCOVERY_PORT = 5002  # Port to listen for discovery broadcasts

@@ -34,6 +34,52 @@ for package in required_packages:
 
 app = Flask(__name__)
 SERVER_URL = "http://127.0.0.1:8080/update"
+DEFAULT_INTERVAL = 300  # Default interval (5 minutes)
+min_interval = 60  # Minimum interval in seconds (1 minute)
+max_interval = 600  # Maximum interval in seconds (10 minutes)
+# Variable to store the current reporting interval
+reporting_interval = DEFAULT_INTERVAL
+
+# Admin-set frequency via API
+admin_set_interval = None
+
+# Function to dynamically adjust the interval based on system load
+def adjust_interval_based_on_load():
+    global reporting_interval
+
+    # Get the current system CPU and memory usage
+    cpu_usage = psutil.cpu_percent(interval=1)
+    memory_usage = psutil.virtual_memory().percent
+
+    # Adjust interval based on load (example logic)
+    if cpu_usage < 30 and memory_usage < 40:  # Low load
+        reporting_interval = min_interval  # Faster reporting
+    elif cpu_usage > 80 or memory_usage > 80:  # High load
+        reporting_interval = max_interval  # Slower reporting
+    else:
+        reporting_interval = DEFAULT_INTERVAL  # Normal reporting
+
+    print(f"Adjusted reporting interval to: {reporting_interval} seconds")
+
+
+# Admin API to set the reporting interval
+@app.route('/set-interval', methods=['POST'])
+def set_interval():
+    global admin_set_interval
+    data = request.json
+
+    if 'interval' in data:
+        try:
+            new_interval = int(data['interval'])
+            if min_interval <= new_interval <= max_interval:
+                admin_set_interval = new_interval
+                return jsonify({"status": "success", "new_interval": admin_set_interval}), 200
+            else:
+                return jsonify({"status": "error", "message": "Interval out of bounds"}), 400
+        except ValueError:
+            return jsonify({"status": "error", "message": "Invalid interval format"}), 400
+
+    return jsonify({"status": "error", "message": "Missing interval"}), 400
 
 def discover_server_ip():
     DISCOVERY_PORT = 5002  # Same port as server listens on for discovery
@@ -231,11 +277,21 @@ def send_data_to_server(data):
         print(f"Error sending data to server: {e}")
 
 def run_probe():
+
+    global reporting_interval, admin_set_interval
+
     while True:    
         data = get_system_info()
         send_data_to_server(data)
-        time.sleep(300)  # Wait for 5 minutes before sending the next update
+        # Check if admin has set an interval, otherwise adjust based on system load
+        if admin_set_interval:
+            reporting_interval = admin_set_interval
+        else:
+            adjust_interval_based_on_load()
 
+        send_data_to_server(data)
+        time.sleep(reporting_interval)  # Adjust reporting frequency dynamically
+        
 @app.route('/trigger-update', methods=['POST'])
 def trigger_update():
     data = get_system_info()
