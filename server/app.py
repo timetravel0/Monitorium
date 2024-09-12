@@ -3,12 +3,16 @@ import sys
 import os
 import sqlite3
 import json
+import jwt
+import datetime          
 from flask import Flask, request, render_template, jsonify
 import requests
 from flask_socketio import SocketIO, emit
 import logging
 import threading
 import socket
+from functools import wraps
+          
 
 # List of required packages
 required_packages = [
@@ -16,7 +20,9 @@ required_packages = [
     "psutil",
     "getmac",
     "requests",
-    "flask-socketio"
+    "flask-socketio",
+    "pyjwt",
+    "jwt"
 ]
 
 def install(package):
@@ -32,13 +38,63 @@ for package in required_packages:
 app = Flask(__name__)
 socketio = SocketIO(app)
 
-LATEST_VERSION = "1.0.1"  # Update this when you release a new version
+# Environment variables for secure secret key
+SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'default_fallback_key')  # Replace 'default_fallback_key' with a real key in production
+LATEST_VERSION = "1.0.2"  # Update this when you release a new version
 DATABASE_PATH = 'local_data.db'
 CLIENT_PORT = 5001  # The port where the client Flask server listens
+PROBE_TOKENS = {}
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 
+# Decorator to protect routes with JWT token validation
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({'message': 'Token is missing!'}), 403
+        
+        try:
+            token = token.split(" ")[1]  # Extract the token part from "Bearer <token>"
+            jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token has expired!'}), 403
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Invalid token!'}), 403
+        
+        return f(*args, **kwargs)
+    
+    return decorated
+
+# Function to verify JWT sent by the server
+def verify_server_token(token):
+    try:
+        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        if decoded_token.get('server') == 'trusted_server':
+            return True
+        return False
+    except jwt.ExpiredSignatureError:
+        print("Token has expired!")
+        return False
+    except jwt.InvalidTokenError:
+        print("Invalid token!")
+        return False
+
+# Issue JWT token for clients or admins
+@app.route('/login', methods=['POST'])
+def login():
+    auth = request.json
+    if auth and auth['username'] == os.getenv('ADMIN_USERNAME', 'admin') and auth['password'] == os.getenv('ADMIN_PASSWORD', 'password'):
+        token = jwt.encode({
+            'user': 'admin',
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
+        }, SECRET_KEY, algorithm="HS256")
+        return jsonify({'token': token})
+    
+    return jsonify({'message': 'Invalid credentials!'}), 401 
+    
 @app.route('/latest-version', methods=['GET'])
 def get_latest_version():
     return jsonify({"latest_version": LATEST_VERSION}), 200
@@ -51,7 +107,6 @@ def download_probe():
         return jsonify({"probe_code": probe_code}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 def handle_discovery_requests():
     DISCOVERY_PORT = 5002  # Port to listen for discovery broadcasts
@@ -175,36 +230,63 @@ def resolve_client_ip(mac_address):
     else:
         return None  # MAC address not found
 
+# Function to log into the probe (handshake) before performing an action
+def login_to_probe(probe_ip):
+    if probe_ip in PROBE_TOKENS:
+        return PROBE_TOKENS[probe_ip]  # Use the cached token if available
+
+    # Perform login to the probe to obtain the JWT token
+    try:
+        login_url = f"http://{probe_ip}:5001/login"
+        response = requests.post(login_url, json={
+            "username": os.getenv('ADMIN_USERNAME', 'admin'),
+            "password": os.getenv('ADMIN_PASSWORD', 'password')
+        })
+
+        if response.status_code == 200:
+            token = response.json().get('token')
+            PROBE_TOKENS[probe_ip] = token  # Cache the token for future use
+            print(f"Login to probe {probe_ip} successful, token obtained.")
+            return token
+        else:
+            print(f"Login to probe {probe_ip} failed: {response.text}")
+            return None
+    except Exception as e:
+        print(f"Error during probe login: {e}")
+        return None
+
+# Function to perform the action (e.g., reboot) on the probe
 @app.route('/action', methods=['POST'])
 def perform_action():
     data = request.json
     mac_address = data.get('mac_address')
     action = data.get('action')
 
-    logging.debug(f"Received action request: {action} for MAC: {mac_address}")
-
     if not mac_address or not action:
-        logging.error("Invalid parameters received")
         return jsonify({"status": "failed", "reason": "Invalid parameters"}), 400
 
     client_ip = resolve_client_ip(mac_address)
     if not client_ip:
-        logging.error(f"Client IP not found for MAC: {mac_address}")
         return jsonify({"status": "failed", "reason": "Client IP not found"}), 404
 
+    # Step 1: Login (handshake) with the probe to get the JWT token
+    token = login_to_probe(client_ip)
+    if not token:
+        return jsonify({"status": "failed", "reason": "Login to probe failed"}), 500
+
+    # Step 2: Perform the action on the probe using the JWT token
     try:
-        url = f'http://{client_ip}:{CLIENT_PORT}/{action}'
-        logging.debug(f"Sending {action} request to {url}")
-        response = requests.post(url)
-        logging.debug(f"Response from client: {response.status_code} - {response.text}")
+        headers = {"Authorization": f"Bearer {token}"}
+        url = f'http://{client_ip}:5001/{action}'
+        response = requests.post(url, headers=headers)
+
         if response.status_code == 200:
             return jsonify({"status": "success"}), 200
         else:
-            logging.error(f"Client error: {response.status_code}")
-            return jsonify({"status": "failed", "reason": f"Client error: {response.status_code}"}), 500
+            return jsonify({"status": "failed", "reason": f"Probe error: {response.status_code}"}), 500
     except Exception as e:
-        logging.error(f"Error sending {action} to client: {str(e)}")
         return jsonify({"status": "failed", "reason": f"Error: {str(e)}"}), 500
+
 
 
 @app.route('/update', methods=['POST'])
@@ -299,4 +381,6 @@ if __name__ == '__main__':
     discovery_thread = threading.Thread(target=handle_discovery_requests, daemon=True)
     discovery_thread.start()
 
-    socketio.run(app, debug=True, host='0.0.0.0', port=8080)
+    #socketio.run(app, debug=True, host='0.0.0.0', port=8080)
+    socketio.run(app, debug=True, host='0.0.0.0', port=8080, ssl_context=('cert.pem', 'key.pem'))
+                                                       

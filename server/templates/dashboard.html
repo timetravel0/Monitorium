@@ -17,7 +17,7 @@
         // Load the visualization API and the gauge package.
         google.charts.load('current', {'packages':['gauge']});
 
-        var socket = io.connect('http://' + document.domain + ':' + location.port);
+        var socket = io.connect('https://' + document.domain + ':' + location.port);
 
         socket.on('update_received', function() {
             location.reload();  // Refresh the page when an update is received
@@ -74,24 +74,26 @@
             myModal.show();
         }
 
-        function performAction(macAddress, action) {
-            fetch('/action', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ mac_address: macAddress, action: action })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    console.log(`${action.charAt(0).toUpperCase() + action.slice(1)} requested for client: ${macAddress}`);
-                } else {
-                    console.error(`Failed to perform ${action} for client: ${macAddress}. Reason: ${data.reason}`);
-                }
-            })
-            .catch(error => console.error('Error:', error));
-        }
+		function performAction(macAddress, action) {
+			// Send the request to the server (app.py)
+			fetch('/action', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ mac_address: macAddress, action: action })
+			})
+			.then(response => response.json())
+			.then(data => {
+				if (data.status === 'success') {
+					console.log(`${action} requested for client: ${macAddress}`);
+				} else {
+					console.error(`Failed to perform ${action} for client: ${macAddress}. Reason: ${data.reason}`);
+				}
+			})
+			.catch(error => console.error('Error:', error));
+		}
+
         
         function requestUpdate(macAddress, button) {
             const spinner = document.createElement('span');

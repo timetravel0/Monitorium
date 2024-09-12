@@ -11,8 +11,21 @@ import signal
 from flask import Flask, request, jsonify
 from getmac import get_mac_address as gma
 from threading import Thread
+import jwt
 
 ## I AM NEWER VERSION
+JWT_TOKEN = None  # To store the JWT token after login
+DEFAULT_INTERVAL = 300  # Default interval (5 minutes)
+min_interval = 60  # Minimum interval in seconds (1 minute)
+max_interval = 600  # Maximum interval in seconds (10 minutes)
+SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'default_fallback_key')  # Replace 'default_fallback_key' with a real key in production
+
+
+# Variable to store the current reporting interval
+reporting_interval = DEFAULT_INTERVAL
+
+# Admin-set frequency via API
+admin_set_interval = None
 
 # List of external packages to ensure they are installed
 required_packages = [
@@ -33,7 +46,7 @@ for package in required_packages:
         install(package)
 
 app = Flask(__name__)
-SERVER_URL = "http://127.0.0.1:8080/update"
+SERVER_URL = "https://127.0.0.1:8080/update"
 DEFAULT_INTERVAL = 300  # Default interval (5 minutes)
 min_interval = 60  # Minimum interval in seconds (1 minute)
 max_interval = 600  # Maximum interval in seconds (10 minutes)
@@ -42,6 +55,35 @@ reporting_interval = DEFAULT_INTERVAL
 
 # Admin-set frequency via API
 admin_set_interval = None
+# Login to the server to obtain JWT token
+def login():
+    global JWT_TOKEN
+    server_ip = discover_server_ip()
+    LOGIN_URL = f"https://{server_ip}:8080/login"    
+
+    try:
+        response = requests.post(LOGIN_URL, json={"username": "admin", "password": "password"}, verify='server-cert.pem')  # Assuming self-signed cert
+        if response.status_code == 200:
+            JWT_TOKEN = response.json().get('token')
+            print("Login successful, token obtained.")
+        else:
+            print("Login failed!", response.text)
+    except Exception as e:
+        print(f"Error during login: {e}")
+
+# Function to send authenticated requests using JWT token
+def send_authenticated_request(url, data=None):
+    global JWT_TOKEN
+    headers = {"Authorization": f"Bearer {JWT_TOKEN}"}
+    try:
+        if data:
+            response = requests.post(url, json=data, headers=headers, verify='server-cert.pem')
+        else:
+            response = requests.post(url, headers=headers, verify='server-cert.pem')
+        return response
+    except Exception as e:
+        print(f"Error while sending authenticated request: {e}")
+        return None        
 
 # Function to dynamically adjust the interval based on system load
 def adjust_interval_based_on_load():
@@ -61,6 +103,23 @@ def adjust_interval_based_on_load():
 
     print(f"Adjusted reporting interval to: {reporting_interval} seconds")
 
+# Login endpoint for the server to authenticate itself and get a JWT token
+@app.route('/login', methods=['POST'])
+def login_from_server():
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+
+    # Validate credentials (you can store credentials securely, this is just a simple check)
+    if username == os.getenv('ADMIN_USERNAME', 'admin') and password == os.getenv('ADMIN_PASSWORD', 'password'):
+        token = jwt.encode({
+            'user': 'admin',
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=30)  # Token valid for 30 minutes
+        }, SECRET_KEY, algorithm="HS256")
+
+        return jsonify({'token': token}), 200  # Return the token to the server
+
+    return jsonify({'message': 'Invalid credentials!'}), 401
 
 # Admin API to set the reporting interval
 @app.route('/set-interval', methods=['POST'])
@@ -108,7 +167,7 @@ def discover_server_ip():
 def update_server_url():
     server_ip = discover_server_ip()
     if server_ip:
-        return f"http://{server_ip}:8080/update"
+        return f"https://{server_ip}:8080/update"
     else:
         print("Using default server URL.")
         return SERVER_URL  # Fallback to default server URL
@@ -116,25 +175,57 @@ def update_server_url():
 def delayed_shutdown_or_reboot(command):
     time.sleep(1)  # Delay to allow response to be sent
     os.system(command)
+    
+# Verify JWT token from server
+def verify_server_token(token):
+    try:
+        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        if decoded_token.get('user') == 'admin':
+            return True
+        return False
+    except jwt.ExpiredSignatureError:
+        print("Token has expired!")
+        return False
+    except jwt.InvalidTokenError:
+        print("Invalid token!")
+        return False    
 
 @app.route('/reboot', methods=['POST'])
 def reboot():
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({"status": "failed", "reason": "Missing token"}), 403
+
+    token = token.split(" ")[1]  # Extract the JWT part from "Bearer <token>"
+    if not verify_server_token(token):
+        return jsonify({"status": "failed", "reason": "Invalid or missing token"}), 403
+
     if platform.system() == "Windows":
         command = "shutdown /r /t 0"
-    else:  # Linux
+    else:  # For Linux
         command = "sudo reboot"
     
     Thread(target=delayed_shutdown_or_reboot, args=(command,)).start()
+    
     return jsonify({"status": "rebooting"}), 200
 
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({"status": "failed", "reason": "Missing token"}), 403
+
+    token = token.split(" ")[1]
+    if not verify_server_token(token):
+        return jsonify({"status": "failed", "reason": "Invalid or missing token"}), 403
+
     if platform.system() == "Windows":
         command = "shutdown /s /t 0"
-    else:  # Linux
+    else:  # For Linux
         command = "sudo shutdown now"
     
     Thread(target=delayed_shutdown_or_reboot, args=(command,)).start()
+    
     return jsonify({"status": "shutting down"}), 200
 
 def get_last_boot_time():
@@ -266,13 +357,21 @@ def get_system_info():
 def send_data_to_server(data):
 
     server_url = update_server_url()  # Get the server IP dynamically
-
+    
     try:
-        response = requests.post(server_url, json=data)
-        if response.status_code == 200:
+        response = send_authenticated_request(server_url, data)
+        if response and response.status_code == 200:
             print(f"Data sent to server successfully")
         else:
-            print(f"Failed to send data to server: {response.status_code}, Reason: {response.json().get('reason', 'No reason provided')}")
+            print(f"Failed to send data to server: {response.status_code} - {response.text if response else 'No response'}")                                                  
+             
+
+    #try:
+    #    response = requests.post(server_url, json=data)
+    #    if response.status_code == 200:
+    #        print(f"Data sent to server successfully")
+    #    else:
+    #        print(f"Failed to send data to server: {response.status_code}, Reason: {response.json().get('reason', 'No reason provided')}")
     except Exception as e:
         print(f"Error sending data to server: {e}")
 
@@ -304,6 +403,8 @@ def signal_handler(sig, frame):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)  # Handle Ctrl+C
+    # Login to the server before starting the probe loop
+    login()                                                        
 
     # Run the Flask app in a separate thread
     Thread(target=lambda: app.run(host='0.0.0.0', port=5001)).start()

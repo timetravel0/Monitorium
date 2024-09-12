@@ -11,6 +11,7 @@ server_ip = "127.0.0.1"
 TEMP_PROBE_FILE = "probe_new.py"  # Temporary file for the new version
 probe_process = None  # Global variable to store the probe process
 shutdown_flag = False  # Flag to indicate shutdown
+CA_CERT_PATH = "server-cert.pem"  # Path to the CA certificate for SSL verification
 
 
 # Function to handle shutdown signals
@@ -69,7 +70,7 @@ def discover_server_ip():
 # Check for updates
 def check_for_updates():
     try:
-        response = requests.get(f"http://{server_ip}:8080/latest-version")
+        response = requests.get(f"https://{server_ip}:8080/latest-version", verify=CA_CERT_PATH)
         if response.status_code == 200:
             latest_version = response.json().get("latest_version")
             current_version = get_current_version()
@@ -91,7 +92,7 @@ def check_for_updates():
 # Download the new probe script and save it as a temp file
 def download_new_version():
     try:
-        response = requests.get(f"http://{server_ip}:8080/download-probe")
+        response = requests.get(f"https://{server_ip}:8080/download-probe", verify=CA_CERT_PATH)
         if response.status_code == 200:
             probe_code = response.json().get("probe_code")
             with open(TEMP_PROBE_FILE, "w") as file:
@@ -146,6 +147,7 @@ def apply_update(new_version):
 
 # Main function to check for updates and run the probe
 def run_probe():
+
     # Start the probe initially
     start_probe()
 
@@ -158,6 +160,8 @@ def run_probe():
 
         # Wait for a while before checking for updates again
         time.sleep(300)  # Example sleep for 5 minutes
+
+
 
 
 if __name__ == "__main__":

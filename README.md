@@ -1,16 +1,19 @@
 # Monitorium
 Lightweight, real-time system and network monitoring tool. It features a client-side probe that gathers system metrics and a server-side dashboard that displays the data in a clean, interactive interface. Designed to provide insights on CPU, memory, disk, and network usage, Monitorium helps you keep track of your local infrastructure health.
 
-## Features
-
-- Real-time monitoring of CPU, memory, disk, and network I/O.
-- Automated discovery of server via network broadcast.
-- Client-side control actions (reboot, shutdown).
-- Interactive dashboard with real-time updates.
-- Detailed process and port information.
-- Customizable update intervals.
-- Built with Flask, Socket.IO, and SQLite.
-- Client automatically updated on each probe if a new version is available
+- Real-time Monitoring: Continuous monitoring of CPU, memory, disk usage, and network I/O, providing real-time metrics for connected clients.
+- Automated Server Discovery: Clients automatically discover the server via network broadcast, simplifying the setup process.
+- Client-Side Control Actions: The server can issue client-side control actions such as reboot and shutdown, securely authenticated with JWT tokens.
+- Interactive Dashboard: A web-based dashboard provides real-time updates on client status, including process and port information.
+- Detailed Process and Port Monitoring: Clients send detailed lists of running processes and active network ports to the server for centralized monitoring.
+- Customizable Update Intervals: Update intervals for monitoring data can be customized dynamically based on system load or administrator preferences.
+- Automated Client Updates: Clients automatically update to the latest version when a new probe version is available on the server.
+- Built with Flask, Socket.IO, and SQLite: The system uses Flask for the backend, Socket.IO for real-time communication, and SQLite for lightweight data storage.
+- JWT-Based Authentication: Secure authentication using JWT tokens between the server and clients ensures only authenticated actions (such as reboot or shutdown) are allowed.
+- Server-to-Client Handshake: Before any action (like reboot) is performed, the server securely logs into the client to obtain a JWT token, ensuring authenticated requests.
+- Token Validation on Clients: Clients validate incoming requests from the server by verifying JWT tokens, ensuring actions are performed only by trusted servers.
+- SSL/TLS Support: Secure communication between server and clients is supported using SSL/TLS to prevent man-in-the-middle attacks during data transfer.
+- Environment-Based Credential Management: Server and client login credentials are securely managed using environment variables, reducing the risk of hardcoded secrets.
 
 ## Getting Started
 
