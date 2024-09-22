@@ -5,6 +5,7 @@ import requests
 import socket
 import subprocess
 import signal
+import ipaddress
 
 VERSION_FILE = "version.txt"
 server_ip = "127.0.0.1"
@@ -12,7 +13,22 @@ TEMP_PROBE_FILE = "probe_new.py"  # Temporary file for the new version
 probe_process = None  # Global variable to store the probe process
 shutdown_flag = False  # Flag to indicate shutdown
 CA_CERT_PATH = "server-cert.pem"  # Path to the CA certificate for SSL verification
+SERVER_FILE = "server.txt"
 
+def get_ip_address():
+    try:
+        with open(SERVER_FILE, "r") as file:
+            ip = file.read().strip()
+            try:
+                # Verifica se la stringa è un indirizzo IP valido
+                ipaddress.ip_address(ip)
+                return ip
+            except ValueError:
+                # La stringa non è un indirizzo IP valido
+                return False
+    except FileNotFoundError:
+        # Il file non esiste
+        return False
 
 # Function to handle shutdown signals
 def handle_shutdown(signal, frame):
@@ -147,7 +163,11 @@ def apply_update(new_version):
 
 # Main function to check for updates and run the probe
 def run_probe():
-
+    global server_ip
+    ip = get_ip_address()
+    if ip:
+        server_ip = ip
+    
     # Start the probe initially
     start_probe()
 

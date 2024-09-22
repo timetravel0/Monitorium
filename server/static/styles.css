@@ -28,3 +28,199 @@ th {
     background-color: #4CAF50;
     color: white;
 }
+
+        :root {
+            --bg-color: #121212;
+            --text-color: #ffffff;
+            --table-bg: #1e1e1e;
+            --table-hover: #333333;
+            --modal-bg: #1e1e1e;
+            --btn-bg: #343a40;
+            --btn-text: #ffffff;
+            --header-color: #ffffff;
+            --link-color: #0d6efd;
+            --link-hover-color: #0a58ca;
+            --muted-text-color: #aaaaaa;
+            --table-header-bg: #2a2a2a;
+        }
+
+        /* Light mode variables */
+        body.light-mode {
+            --bg-color: #ffffff;
+            --text-color: #212529;
+            --table-bg: #ffffff;
+            --table-hover: #f1f1f1;
+            --modal-bg: #ffffff;
+            --btn-bg: #f8f9fa;
+            --btn-text: #212529;
+            --header-color: #212529;
+            --link-color: #0d6efd;
+            --link-hover-color: #0a58ca;
+            --muted-text-color: #6c757d;
+            --table-header-bg: #e9ecef;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .table-wrapper {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        .table {
+            width: 100%;
+            table-layout: fixed;
+            background-color: var(--table-bg);
+            color: var(--text-color);
+        }
+
+        .table thead {
+            background-color: var(--table-header-bg);
+            color: var(--text-color);
+        }
+
+        .table-hover tbody tr:hover {
+            background-color: var(--table-hover);
+        }
+
+        .modal-content {
+            background-color: var(--modal-bg);
+            color: var(--text-color);
+        }
+
+        .modal-header, .modal-footer {
+            border-color: var(--table-hover);
+        }
+
+        .btn {
+            background-color: var(--btn-bg);
+            color: var(--btn-text);
+        }
+
+        .btn:hover {
+            background-color: var(--btn-bg);
+            opacity: 0.8;
+        }
+
+        a {
+            color: var(--link-color);
+        }
+
+        a:hover {
+            color: var(--link-hover-color);
+        }
+
+        /* Download Section */
+        .download-section {
+            text-align: center;
+            margin-top: 40px;
+            margin-bottom: 40px;
+        }
+
+        .download-btn {
+            background: linear-gradient(45deg, #007bff, #00d4ff);
+            color: #fff;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1.2em;
+            box-shadow: 0px 4px 6px rgba(0, 123, 255, 0.4);
+            transition: background 0.3s ease, transform 0.3s ease;
+        }
+
+        .download-btn:hover {
+            background: linear-gradient(45deg, #0056b3, #00aaff);
+            text-decoration: none;
+            transform: translateY(-2px);
+        }
+
+        .download-btn i {
+            margin-right: 10px;
+        }
+
+        .download-description {
+            color: var(--muted-text-color);
+        }
+
+        .gauge-container {
+            width: 100px;
+            height: 100px;
+        }
+
+        .action-buttons .btn {
+            margin-right: 5px;
+        }
+
+        .tooltip-inner {
+            max-width: 200px;
+            text-align: left;
+        }
+
+        /* Toggle Switch */
+        .theme-switch-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .theme-switch {
+            display: inline-block;
+            height: 34px;
+            position: relative;
+            width: 60px;
+        }
+
+        .theme-switch input {
+            display: none;
+        }
+
+        .slider {
+            background-color: #ccc;
+            bottom: 0;
+            cursor: pointer;
+            left: 0;
+            position: absolute;
+            right: 0;
+            top: 0;
+            transition: .4s;
+        }
+
+        .slider:before {
+            background-color: white;
+            bottom: 4px;
+            content: "";
+            height: 26px;
+            left: 4px;
+            position: absolute;
+            transition: .4s;
+            width: 26px;
+        }
+
+        input:checked + .slider {
+            background-color: #66bb6a;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        .slider.round {
+            border-radius: 34px;
+        }
+
+        .slider.round:before {
+            border-radius: 50%;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            color: var(--header-color);
+        }

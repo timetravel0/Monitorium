@@ -12,6 +12,7 @@ from flask import Flask, request, jsonify
 from getmac import get_mac_address as gma
 from threading import Thread
 import jwt
+import ipaddress
 
 ## I AM NEWER VERSION
 JWT_TOKEN = None  # To store the JWT token after login
@@ -19,7 +20,7 @@ DEFAULT_INTERVAL = 300  # Default interval (5 minutes)
 min_interval = 60  # Minimum interval in seconds (1 minute)
 max_interval = 600  # Maximum interval in seconds (10 minutes)
 SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'default_fallback_key')  # Replace 'default_fallback_key' with a real key in production
-
+SERVER_FILE = "server.txt"
 
 # Variable to store the current reporting interval
 reporting_interval = DEFAULT_INTERVAL
@@ -56,6 +57,22 @@ reporting_interval = DEFAULT_INTERVAL
 # Admin-set frequency via API
 admin_set_interval = None
 # Login to the server to obtain JWT token
+
+def get_ip_address():
+    try:
+        with open(SERVER_FILE, "r") as file:
+            ip = file.read().strip()
+            try:
+                # Verifica se la stringa è un indirizzo IP valido
+                ipaddress.ip_address(ip)
+                return ip
+            except ValueError:
+                # La stringa non è un indirizzo IP valido
+                return False
+    except FileNotFoundError:
+        # Il file non esiste
+        return False
+
 def login():
     global JWT_TOKEN
     server_ip = discover_server_ip()
@@ -141,31 +158,35 @@ def set_interval():
     return jsonify({"status": "error", "message": "Missing interval"}), 400
 
 def discover_server_ip():
-    DISCOVERY_PORT = 5002  # Same port as server listens on for discovery
-    DISCOVERY_MESSAGE = "DISCOVER_SERVER"
-    broadcast_ip = '<broadcast>'  # Broadcast address to reach all devices on the network
+    ip = get_ip_address()
+    if ip:
+        return ip    
+    else:
+        DISCOVERY_PORT = 5002  # Same port as server listens on for discovery
+        DISCOVERY_MESSAGE = "DISCOVER_SERVER"
+        broadcast_ip = '<broadcast>'  # Broadcast address to reach all devices on the network
 
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.settimeout(5)  # Timeout after 5 seconds if no response is received
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.settimeout(5)  # Timeout after 5 seconds if no response is received
 
-        try:
-            # Broadcast the discovery message
-            sock.sendto(DISCOVERY_MESSAGE.encode('utf-8'), (broadcast_ip, DISCOVERY_PORT))
-            print("Broadcasting discovery message...")
+            try:
+                # Broadcast the discovery message
+                sock.sendto(DISCOVERY_MESSAGE.encode('utf-8'), (broadcast_ip, DISCOVERY_PORT))
+                print("Broadcasting discovery message...")
 
-            # Wait for a response from the server
-            response, addr = sock.recvfrom(1024)  # Buffer size of 1024 bytes
-            print(f"Received response from server: {addr[0]}")
-            return addr[0]  # Return the server IP address
+                # Wait for a response from the server
+                response, addr = sock.recvfrom(1024)  # Buffer size of 1024 bytes
+                print(f"Received response from server: {addr[0]}")
+                return addr[0]  # Return the server IP address
 
-        except socket.timeout:
-            print("Server discovery timed out.")
-            return None
+            except socket.timeout:
+                print("Server discovery timed out.")
+                return None
 
 # Update SERVER_URL dynamically
 def update_server_url():
-    server_ip = discover_server_ip()
+    server_ip = discover_server_ip()        
     if server_ip:
         return f"https://{server_ip}:8080/update"
     else:

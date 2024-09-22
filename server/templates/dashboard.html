@@ -4,40 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Network Dashboard</title>
-    <!-- Bootstrap CSS -->
+    <!-- Bootstrap CSS with a modern theme -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
-
+    <!-- Custom Stylesheet -->
     <link rel="stylesheet" href="/static/styles.css">
+
+    <!-- Socket.io -->
     <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
-    
-    <!-- Load Google Charts library -->
+    <!-- Google Charts library -->
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+
+    <!-- Custom Script -->
     <script type="text/javascript">
-        // Load the visualization API and the gauge package.
+        // Load Google Charts
         google.charts.load('current', {'packages':['gauge']});
 
+        // Initialize Socket.io
         var socket = io.connect('https://' + document.domain + ':' + location.port);
 
+        // Listen for updates
         socket.on('update_received', function() {
-            location.reload();  // Refresh the page when an update is received
+            location.reload();
         });
 
+        // Function to show details in modal
         function showDetails(title, details) {
             document.getElementById('modalTitle').innerText = title;
             const tableBody = document.getElementById('modalBody');
             tableBody.innerHTML = ''; // Clear previous content
-
             let detailArray;
-
             try {
                 detailArray = JSON.parse(details);
             } catch (e) {
                 console.error("Failed to parse details:", e);
-                detailArray = details; // If parsing fails, use the details as is
+                detailArray = details;
             }
 
-            // Check if detailArray is an array or an object
             if (Array.isArray(detailArray)) {
                 detailArray.forEach((item, index) => {
                     const row = document.createElement('tr');
@@ -61,7 +65,6 @@
                     tableBody.appendChild(row);
                 });
             } else {
-                // Handle case where details is a simple string or other types
                 const row = document.createElement('tr');
                 const cell = document.createElement('td');
                 cell.colSpan = 2;
@@ -74,34 +77,32 @@
             myModal.show();
         }
 
-		function performAction(macAddress, action) {
-			// Send the request to the server (app.py)
-			fetch('/action', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({ mac_address: macAddress, action: action })
-			})
-			.then(response => response.json())
-			.then(data => {
-				if (data.status === 'success') {
-					console.log(`${action} requested for client: ${macAddress}`);
-				} else {
-					console.error(`Failed to perform ${action} for client: ${macAddress}. Reason: ${data.reason}`);
-				}
-			})
-			.catch(error => console.error('Error:', error));
-		}
+        // Function to perform actions (reboot/shutdown)
+        function performAction(macAddress, action) {
+            fetch('/action', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ mac_address: macAddress, action: action })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    console.log(`${action} requested for client: ${macAddress}`);
+                } else {
+                    console.error(`Failed to perform ${action} for client: ${macAddress}. Reason: ${data.reason}`);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
 
-        
+        // Function to request update
         function requestUpdate(macAddress, button) {
             const spinner = document.createElement('span');
             spinner.classList.add('spinner-border', 'spinner-border-sm', 'ms-2');
             spinner.setAttribute('role', 'status');
             spinner.setAttribute('aria-hidden', 'true');
-
-            // Append the spinner next to the button
             button.appendChild(spinner);
 
             fetch('/request-update', {
@@ -113,43 +114,33 @@
             })
             .then(response => response.json())
             .then(data => {
-                // Remove the spinner after the request is done
                 spinner.remove();
-
                 if (data.status === 'update-requested') {
-                    // Update was successful, maybe do something here if needed
                     console.log('Update requested for client:', macAddress);
                 } else {
-                    // Show error alert if the update failed
                     alert('Failed to request update for client: ' + macAddress);
                 }
             })
             .catch(error => {
-                // Remove the spinner and show error if the request fails
                 spinner.remove();
                 alert('Error requesting update for client: ' + macAddress);
             });
         }
 
-        // Function to draw the Google Chart Gauges
+        // Function to draw gauge charts
         function drawGauge(containerId, value) {
-            var data = google.visualization.arrayToDataTable([
-                ['Label', 'Value'],
-                ['', value]
-            ]);
-
+            var data = google.visualization.arrayToDataTable([['Label', 'Value'], ['', value]]);
             var options = {
                 width: 100, height: 100,
                 redFrom: 90, redTo: 100,
                 yellowFrom: 75, yellowTo: 90,
                 minorTicks: 5
             };
-
             var chart = new google.visualization.Gauge(document.getElementById(containerId));
             chart.draw(data, options);
         }
 
-        // Create gauges for each row in the table
+        // Initialize gauges for each PC
         function initializeGauges() {
             {% for pc in pc_info %}
             drawGauge('cpu-gauge-{{ pc.mac_address }}', {{ pc.cpu_usage }});
@@ -157,64 +148,52 @@
             {% endfor %}
         }
 
-        // Initialize gauges after Google Charts library loads
         google.charts.setOnLoadCallback(initializeGauges);
     </script>
 
-    <style>
-        .table-wrapper {
-            width: 100%;
-        }
-
-        .table {
-            width: 100%;
-            table-layout: fixed;
-        }
-
-        .modal-content {
-            max-width: 100%;
-        }
-
-        .modal-body {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .modal-content table {
-            width: 100%;
-            table-layout: auto;
-        }
-
-        .modal-content th, .modal-content td {
-            word-wrap: break-word;
-        }
-
-        .gauge-container {
-            width: 100px;
-            height: 100px;
-        }
-
-    </style>
+ 
 </head>
 <body>
     <div class="container-fluid">
-        <h1 class="my-4">Network Dashboard</h1>
+        <!-- Header with Theme Switch -->
+ <!-- Header with centered title -->
+        <div class="header">
+            <h1 class="my-4">Network Dashboard</h1>
+        </div>
+
+        <!-- Theme Switcher -->
+        <div class="theme-switch-wrapper">
+            <label class="theme-switch" for="theme-checkbox">
+                <input type="checkbox" id="theme-checkbox">
+                <div class="slider round"></div>
+            </label>
+            <em style="margin-left: 10px;">Toggle Light/Dark Mode</em>
+        </div>
+
+        <!-- Enhanced Download Section -->
+        <div class="download-section">
+            <a href="/download-client" class="download-btn">
+                <i class="bi bi-cloud-arrow-down-fill"></i> Download Client
+            </a>
+            <p class="mt-3 text-muted">Easily set up monitoring and control by downloading the client software for your machine.</p>
+        </div>
+
         <div class="table-wrapper">
-            <table class="table table-bordered table-hover">
-                <thead class="table-dark">
+            <table class="table table-bordered table-hover align-middle">
+                <thead>
                     <tr>
-                        <th>Hostname</th>
-                        <th>Local IP Address</th>
-                        <th>Platform</th>
-                        <th>CPU Usage (%)</th>
-                        <th>Memory Usage (%)</th>
-                        <th>HDD Usage (Total/Used/Free in GB, %)</th>
-                        <th>Uptime</th>
-                        <th>Current Users</th>
-                        <th>Processes</th>
-                        <th>Used Ports</th>
-                        <th>Last Updated</th>
-                        <th>Actions</th>
+                        <th scope="col">Hostname</th>
+                        <th scope="col">Local IP</th>
+                        <th scope="col">Platform</th>
+                        <th scope="col">CPU Usage</th>
+                        <th scope="col">Memory Usage</th>
+                        <th scope="col">HDD Usage</th>
+                        <th scope="col">Uptime</th>
+                        <th scope="col">Current Users</th>
+                        <th scope="col">Processes</th>
+                        <th scope="col">Used Ports</th>
+                        <th scope="col">Last Updated</th>
+                        <th scope="col">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -235,24 +214,24 @@
                         <td>{{ pc.uptime }}</td>
                         <td><pre>{{ pc.current_users }}</pre></td>
                         <td>
-                            <button class="btn btn-info btn-sm" onclick="event.stopPropagation(); showDetails('Processes ({{ pc.running_processes|length }})', `{{ pc.running_processes }}`)">
-                                Show ({{ pc.running_processes|length }})
+                            <button class="btn btn-outline-info btn-sm" onclick="event.stopPropagation(); showDetails('Processes ({{ pc.running_processes|length }})', `{{ pc.running_processes }}`)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Running Processes">
+                                <i class="bi bi-list-ul"></i> ({{ pc.running_processes|length }})
                             </button>
                         </td>
                         <td>
-                            <button class="btn btn-info btn-sm" onclick="event.stopPropagation(); showDetails('Used Ports ({{ pc.used_ports|length }})', `{{ pc.used_ports|length }}`)">
-                                Show ({{ pc.used_ports|length }})
+                            <button class="btn btn-outline-info btn-sm" onclick="event.stopPropagation(); showDetails('Used Ports ({{ pc.used_ports|length }})', `{{ pc.used_ports }}`)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Used Ports">
+                                <i class="bi bi-plug-fill"></i> ({{ pc.used_ports|length }})
                             </button>
                         </td>
                         <td>{{ pc.last_updated }}</td>
-                        <td>
-                            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); requestUpdate('{{ pc.mac_address }}', this)">
+                        <td class="action-buttons">
+                            <button class="btn btn-outline-primary btn-sm" onclick="event.stopPropagation(); requestUpdate('{{ pc.mac_address }}', this)" data-bs-toggle="tooltip" data-bs-placement="top" title="Request Update">
                                 <i class="bi bi-arrow-clockwise"></i>
                             </button>
-                            <button class="btn btn-warning btn-sm" onclick="event.stopPropagation(); performAction('{{ pc.mac_address }}', 'reboot')">
+                            <button class="btn btn-outline-warning btn-sm" onclick="event.stopPropagation(); performAction('{{ pc.mac_address }}', 'reboot')" data-bs-toggle="tooltip" data-bs-placement="top" title="Reboot Machine">
                                 <i class="bi bi-arrow-repeat"></i>
                             </button>
-                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); performAction('{{ pc.mac_address }}', 'shutdown')">
+                            <button class="btn btn-outline-danger btn-sm" onclick="event.stopPropagation(); performAction('{{ pc.mac_address }}', 'shutdown')" data-bs-toggle="tooltip" data-bs-placement="top" title="Shutdown Machine">
                                 <i class="bi bi-power"></i>
                             </button>
                         </td>
@@ -263,28 +242,59 @@
         </div>
     </div>
 
-    <!-- Modal -->
+    <!-- Modal for Details -->
     <div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="modalTitle">Details</h5>
+                    <h5 class="modal-title text-primary" id="modalTitle">Details</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <table class="table">
+                    <table class="table table-striped">
                         <tbody id="modalBody">
                         </tbody>
                     </table>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i> Close</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Bootstrap JS -->
+    <!-- Bootstrap JS and Tooltip Initialization -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Initialize tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        })
+
+        // Theme switcher
+        const toggleSwitch = document.querySelector('#theme-checkbox');
+        const currentTheme = localStorage.getItem('theme') ? localStorage.getItem('theme') : null;
+
+        if (currentTheme) {
+            document.body.classList.add(currentTheme);
+            if (currentTheme === 'light-mode') {
+                toggleSwitch.checked = true;
+            }
+        } else {
+            // Ensure dark mode is the default
+            localStorage.setItem('theme', 'dark-mode');
+        }
+
+        toggleSwitch.addEventListener('change', function() {
+            if (this.checked) {
+                document.body.classList.add('light-mode');
+                localStorage.setItem('theme', 'light-mode');
+            } else {
+                document.body.classList.remove('light-mode');
+                localStorage.setItem('theme', 'dark-mode');
+            }
+        });
+    </script>
 </body>
 </html>

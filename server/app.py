@@ -12,29 +12,8 @@ import logging
 import threading
 import socket
 from functools import wraps
+from cachetools import TTLCache
           
-
-# List of required packages
-required_packages = [
-    "Flask",
-    "psutil",
-    "getmac",
-    "requests",
-    "flask-socketio",
-    "pyjwt",
-    "jwt"
-]
-
-def install(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-# Install missing packages
-for package in required_packages:
-    try:
-        __import__(package.lower())
-    except ImportError:
-        install(package)
-
 app = Flask(__name__)
 socketio = SocketIO(app)
 
@@ -46,7 +25,7 @@ CLIENT_PORT = 5001  # The port where the client Flask server listens
 PROBE_TOKENS = {}
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 # Decorator to protect routes with JWT token validation
 def token_required(f):
@@ -128,7 +107,7 @@ def handle_discovery_requests():
 def get_db_connection():
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    return conn    
 
 def recreate_database():
     if os.path.exists(DATABASE_PATH):
@@ -196,10 +175,7 @@ def ensure_table_exists(cursor):
 # Check and recreate the database if needed when the server starts
 check_and_recreate_db()
 
-def get_db_connection():
-    conn = sqlite3.connect(DATABASE_PATH)
-    conn.row_factory = sqlite3.Row  # This allows us to access columns by name.
-    return conn
+
 
 @app.route('/')
 def dashboard():
@@ -382,5 +358,5 @@ if __name__ == '__main__':
     discovery_thread.start()
 
     #socketio.run(app, debug=True, host='0.0.0.0', port=8080)
-    socketio.run(app, debug=True, host='0.0.0.0', port=8080, ssl_context=('cert.pem', 'key.pem'))
+    socketio.run(app, debug=True, host='0.0.0.0', port=8080, ssl_context=('cert.pem', 'key.pem'), allow_unsafe_werkzeug=True)
                                                        
