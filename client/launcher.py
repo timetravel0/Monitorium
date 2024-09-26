@@ -6,6 +6,15 @@ import socket
 import subprocess
 import signal
 import ipaddress
+import logging
+
+# Set up logging
+LOG_FILE = "probe_manager.log"  # Specify your logfile path here
+logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
+
+# Change the working directory to the script's directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
 
 VERSION_FILE = "version.txt"
 server_ip = "127.0.0.1"
@@ -21,28 +30,27 @@ def get_ip_address():
         with open(SERVER_FILE, "r") as file:
             ip = file.read().strip()
             try:
-                # Verifica se la stringa è un indirizzo IP valido
+                # Verify if the string is a valid IP address
                 ipaddress.ip_address(ip)
                 return ip
             except ValueError:
-                # La stringa non è un indirizzo IP valido
+                # The string is not a valid IP address
                 return False
     except FileNotFoundError:
-        # Il file non esiste
+        # The file does not exist
         return False
 
 # Function to handle shutdown signals
-def handle_shutdown(signal, frame):
+def handle_shutdown(signal_number, frame):
     global shutdown_flag
     shutdown_flag = True
-    print("Received shutdown signal. Stopping probe...")
+    logging.info("Received shutdown signal. Stopping probe...")
     stop_probe()  # Stop the probe process properly
     sys.exit(0)
 
 # Register signal handlers
 signal.signal(signal.SIGINT, handle_shutdown)
 signal.signal(signal.SIGTERM, handle_shutdown)
-
 
 # Read the current version from version.txt
 def get_current_version():
@@ -52,12 +60,10 @@ def get_current_version():
     except FileNotFoundError:
         return "0.0.0"  # Default version if version.txt doesn't exist
 
-
 # Write the new version to version.txt
 def set_current_version(version):
     with open(VERSION_FILE, "w") as file:
         file.write(version)
-
 
 # Discover server IP
 def discover_server_ip():
@@ -72,17 +78,16 @@ def discover_server_ip():
         try:
             # Broadcast the discovery message
             sock.sendto(DISCOVERY_MESSAGE.encode('utf-8'), (broadcast_ip, DISCOVERY_PORT))
-            print("Broadcasting discovery message...")
+            logging.info("Broadcasting discovery message...")
 
             # Wait for a response from the server
             response, addr = sock.recvfrom(1024)  # Buffer size of 1024 bytes
-            print(f"Received response from server: {addr[0]}")
+            logging.info(f"Received response from server: {addr[0]}")
             return addr[0]  # Return the server IP address
 
         except socket.timeout:
-            print("Server discovery timed out.")
+            logging.info("Server discovery timed out.")
             return None
-
 
 # Check for updates
 def check_for_updates():
@@ -93,18 +98,17 @@ def check_for_updates():
             current_version = get_current_version()
 
             if latest_version and latest_version != current_version:
-                print(f"Update available: {latest_version} (current: {current_version})")
+                logging.info(f"Update available: {latest_version} (current: {current_version})")
                 return latest_version
             else:
-                print("Client is up to date.")
+                logging.info("Client is up to date.")
                 return None
         else:
-            print(f"Failed to fetch the latest version: {response.status_code}")
+            logging.error(f"Failed to fetch the latest version: {response.status_code}")
             return None
     except Exception as e:
-        print(f"Error checking for updates: {e}")
+        logging.exception("Error checking for updates:")
         return None
-
 
 # Download the new probe script and save it as a temp file
 def download_new_version():
@@ -114,36 +118,33 @@ def download_new_version():
             probe_code = response.json().get("probe_code")
             with open(TEMP_PROBE_FILE, "w") as file:
                 file.write(probe_code)
-            print("New version downloaded successfully.")
+            logging.info("New version downloaded successfully.")
             return True
         else:
-            print(f"Failed to download the update: {response.status_code}")
+            logging.error(f"Failed to download the update: {response.status_code}")
             return False
     except Exception as e:
-        print(f"Error downloading update: {e}")
+        logging.exception("Error downloading update:")
         return False
-
 
 # Start the probe.py as a separate process
 def start_probe():
     global probe_process
-    print("Starting probe.py...")
+    logging.info("Starting probe.py...")
     probe_process = subprocess.Popen([sys.executable, "probe.py"])
-
 
 # Stop the running probe process and clean up
 def stop_probe():
     global probe_process
     if probe_process:
-        print("Stopping probe.py...")
+        logging.info("Stopping probe.py...")
         probe_process.terminate()  # Gracefully stop the probe
         probe_process.wait()  # Wait for the process to terminate
         probe_process = None
 
-
 # Apply the update by renaming the temp file and restarting
 def apply_update(new_version):
-    print("Applying update...")
+    logging.info("Applying update...")
 
     # Stop the probe and rename the new file
     try:
@@ -154,13 +155,12 @@ def apply_update(new_version):
         
         os.rename(TEMP_PROBE_FILE, "probe.py")
         set_current_version(new_version)  # Update the version file
-        print("Probe updated successfully. Restarting...")
+        logging.info("Probe updated successfully. Restarting...")
 
         # Restart the probe
         start_probe()
     except Exception as e:
-        print(f"Error applying update: {e}")
-
+        logging.exception("Error applying update:")
 
 # Main function to check for updates and run the probe
 def run_probe():
@@ -180,10 +180,8 @@ def run_probe():
                 apply_update(new_version)
 
         # Wait for a while before checking for updates again
-        time.sleep(300)  # Example sleep for 5 minutes
-
-
-
+        time.sleep(300)  # Sleep for 5 minutes
 
 if __name__ == "__main__":
+    logging.info("Starting probe manager.")
     run_probe()

@@ -12,13 +12,26 @@ from getmac import get_mac_address as gma
 from threading import Thread
 import jwt
 import ipaddress
+import logging
 
-## I AM NEWER VERSION
+# Set up logging
+LOG_FILE = "probe.log"  # Specify your logfile path here
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s:%(message)s'
+)
+
+# Change the working directory to the script's directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
+
+# I AM NEWER VERSION
 JWT_TOKEN = None  # To store the JWT token after login
 DEFAULT_INTERVAL = 300  # Default interval (5 minutes)
 min_interval = 60  # Minimum interval in seconds (1 minute)
 max_interval = 600  # Maximum interval in seconds (10 minutes)
-SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'default_fallback_key')  # Replace 'default_fallback_key' with a real key in production
+SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'default_fallback_key')  # Replace with a real key in production
 SERVER_FILE = "server.txt"
 server_port = "5454"
 
@@ -30,45 +43,42 @@ admin_set_interval = None
 
 app = Flask(__name__)
 SERVER_URL = f"https://127.0.0.1:{server_port}/update"
-DEFAULT_INTERVAL = 300  # Default interval (5 minutes)
-min_interval = 60  # Minimum interval in seconds (1 minute)
-max_interval = 600  # Maximum interval in seconds (10 minutes)
-# Variable to store the current reporting interval
-reporting_interval = DEFAULT_INTERVAL
 
-# Admin-set frequency via API
-admin_set_interval = None
-# Login to the server to obtain JWT token
-
+# Function to get server IP address from file
 def get_ip_address():
     try:
         with open(SERVER_FILE, "r") as file:
             ip = file.read().strip()
             try:
-                # Verifica se la stringa è un indirizzo IP valido
+                # Verify if the string is a valid IP address
                 ipaddress.ip_address(ip)
                 return ip
             except ValueError:
-                # La stringa non è un indirizzo IP valido
+                # The string is not a valid IP address
                 return False
     except FileNotFoundError:
-        # Il file non esiste
+        # The file does not exist
         return False
 
+# Function to login to the server to obtain JWT token
 def login():
     global JWT_TOKEN
     server_ip = discover_server_ip()
-    LOGIN_URL = f"https://{server_ip}:{server_port}/login"    
+    LOGIN_URL = f"https://{server_ip}:{server_port}/login"
 
     try:
-        response = requests.post(LOGIN_URL, json={"username": "admin", "password": "password"}, verify='server-cert.pem')  # Assuming self-signed cert
+        response = requests.post(
+            LOGIN_URL,
+            json={"username": "admin", "password": "password"},
+            verify='server-cert.pem'  # Assuming self-signed cert
+        )
         if response.status_code == 200:
             JWT_TOKEN = response.json().get('token')
-            print("Login successful, token obtained.")
+            logging.info("Login successful, token obtained.")
         else:
-            print("Login failed!", response.text)
+            logging.error(f"Login failed! {response.text}")
     except Exception as e:
-        print(f"Error during login: {e}")
+        logging.exception("Error during login:")
 
 # Function to send authenticated requests using JWT token
 def send_authenticated_request(url, data=None):
@@ -81,8 +91,8 @@ def send_authenticated_request(url, data=None):
             response = requests.post(url, headers=headers, verify='server-cert.pem')
         return response
     except Exception as e:
-        print(f"Error while sending authenticated request: {e}")
-        return None        
+        logging.exception("Error while sending authenticated request:")
+        return None
 
 # Function to dynamically adjust the interval based on system load
 def adjust_interval_based_on_load():
@@ -100,7 +110,7 @@ def adjust_interval_based_on_load():
     else:
         reporting_interval = DEFAULT_INTERVAL  # Normal reporting
 
-    print(f"Adjusted reporting interval to: {reporting_interval} seconds")
+    logging.info(f"Adjusted reporting interval to: {reporting_interval} seconds")
 
 # Login endpoint for the server to authenticate itself and get a JWT token
 @app.route('/login', methods=['POST'])
@@ -109,11 +119,11 @@ def login_from_server():
     username = data.get('username')
     password = data.get('password')
 
-    # Validate credentials (you can store credentials securely, this is just a simple check)
+    # Validate credentials
     if username == os.getenv('ADMIN_USERNAME', 'admin') and password == os.getenv('ADMIN_PASSWORD', 'password'):
         token = jwt.encode({
             'user': 'admin',
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=30)  # Token valid for 30 minutes
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
         }, SECRET_KEY, algorithm="HS256")
 
         return jsonify({'token': token}), 200  # Return the token to the server
@@ -142,7 +152,7 @@ def set_interval():
 def discover_server_ip():
     ip = get_ip_address()
     if ip:
-        return ip    
+        return ip
     else:
         DISCOVERY_PORT = 5002  # Same port as server listens on for discovery
         DISCOVERY_MESSAGE = "DISCOVER_SERVER"
@@ -155,30 +165,30 @@ def discover_server_ip():
             try:
                 # Broadcast the discovery message
                 sock.sendto(DISCOVERY_MESSAGE.encode('utf-8'), (broadcast_ip, DISCOVERY_PORT))
-                print("Broadcasting discovery message...")
+                logging.info("Broadcasting discovery message...")
 
                 # Wait for a response from the server
                 response, addr = sock.recvfrom(1024)  # Buffer size of 1024 bytes
-                print(f"Received response from server: {addr[0]}")
+                logging.info(f"Received response from server: {addr[0]}")
                 return addr[0]  # Return the server IP address
 
             except socket.timeout:
-                print("Server discovery timed out.")
+                logging.error("Server discovery timed out.")
                 return None
 
 # Update SERVER_URL dynamically
 def update_server_url():
-    server_ip = discover_server_ip()        
+    server_ip = discover_server_ip()
     if server_ip:
         return f"https://{server_ip}:{server_port}/update"
     else:
-        print("Using default server URL.")
+        logging.warning("Using default server URL.")
         return SERVER_URL  # Fallback to default server URL
 
 def delayed_shutdown_or_reboot(command):
     time.sleep(1)  # Delay to allow response to be sent
     os.system(command)
-    
+
 # Verify JWT token from server
 def verify_server_token(token):
     try:
@@ -187,11 +197,11 @@ def verify_server_token(token):
             return True
         return False
     except jwt.ExpiredSignatureError:
-        print("Token has expired!")
+        logging.error("Token has expired!")
         return False
     except jwt.InvalidTokenError:
-        print("Invalid token!")
-        return False    
+        logging.error("Invalid token!")
+        return False
 
 @app.route('/reboot', methods=['POST'])
 def reboot():
@@ -207,9 +217,9 @@ def reboot():
         command = "shutdown /r /t 0"
     else:  # For Linux
         command = "sudo reboot"
-    
+
     Thread(target=delayed_shutdown_or_reboot, args=(command,)).start()
-    
+
     return jsonify({"status": "rebooting"}), 200
 
 @app.route('/shutdown', methods=['POST'])
@@ -226,9 +236,9 @@ def shutdown():
         command = "shutdown /s /t 0"
     else:  # For Linux
         command = "sudo shutdown now"
-    
+
     Thread(target=delayed_shutdown_or_reboot, args=(command,)).start()
-    
+
     return jsonify({"status": "shutting down"}), 200
 
 def get_last_boot_time():
@@ -246,7 +256,7 @@ def get_disk_io():
     try:
         # Retrieve the disk I/O counters, ignoring devices like `ram0`, `loop*`, etc.
         io_counters = psutil.disk_io_counters(perdisk=True)
-        
+
         # Filter out virtual devices that aren't relevant
         relevant_counters = {k: v for k, v in io_counters.items() if not k.startswith(('ram', 'loop'))}
 
@@ -259,7 +269,7 @@ def get_disk_io():
             "write_bytes": write_bytes
         }
     except Exception as e:
-        print(f"Error while fetching disk I/O counters: {e}")
+        logging.exception("Error while fetching disk I/O counters:")
         return {
             "read_bytes": 0,
             "write_bytes": 0
@@ -277,6 +287,7 @@ def get_public_ip_address():
         response = requests.get('https://api.ipify.org?format=json')
         return response.json()['ip']
     except Exception as e:
+        logging.error(f"Error getting public IP address: {e}")
         return f"Error: {e}"
 
 def get_local_ip():
@@ -284,13 +295,13 @@ def get_local_ip():
         # Create a socket and connect to a remote server (e.g., Google's public DNS server)
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(2)
-        
+
         # Use an external address (this does not send data, just opens the socket to determine the interface)
         s.connect(("8.8.8.8", 80))
         local_ip = s.getsockname()[0]
         s.close()
     except Exception as e:
-        print(f"Error getting local IP: {e}")
+        logging.exception("Error getting local IP:")
         local_ip = "127.0.0.1"  # Fallback in case of error
 
     return local_ip
@@ -329,7 +340,6 @@ def get_system_info():
     hostname = socket.gethostname()
     ip_address = get_public_ip_address()
     local_ip_address = get_local_ip()
-    #local_ip_address = socket.gethostbyname(hostname)
     platform_info = platform.platform()
     mac_address = gma()
     cpu_usage = psutil.cpu_percent(interval=1)
@@ -358,31 +368,21 @@ def get_system_info():
     }
 
 def send_data_to_server(data):
-
     server_url = update_server_url()  # Get the server IP dynamically
-    
+
     try:
         response = send_authenticated_request(server_url, data)
         if response and response.status_code == 200:
-            print(f"Data sent to server successfully")
+            logging.info("Data sent to server successfully.")
         else:
-            print(f"Failed to send data to server: {response.status_code} - {response.text if response else 'No response'}")                                                  
-             
-
-    #try:
-    #    response = requests.post(server_url, json=data)
-    #    if response.status_code == 200:
-    #        print(f"Data sent to server successfully")
-    #    else:
-    #        print(f"Failed to send data to server: {response.status_code}, Reason: {response.json().get('reason', 'No reason provided')}")
+            logging.error(f"Failed to send data to server: {response.status_code} - {response.text if response else 'No response'}")
     except Exception as e:
-        print(f"Error sending data to server: {e}")
+        logging.exception("Error sending data to server:")
 
 def run_probe():
-
     global reporting_interval, admin_set_interval
 
-    while True:    
+    while True:
         data = get_system_info()
         send_data_to_server(data)
         # Check if admin has set an interval, otherwise adjust based on system load
@@ -391,9 +391,8 @@ def run_probe():
         else:
             adjust_interval_based_on_load()
 
-        send_data_to_server(data)
         time.sleep(reporting_interval)  # Adjust reporting frequency dynamically
-        
+
 @app.route('/trigger-update', methods=['POST'])
 def trigger_update():
     data = get_system_info()
@@ -401,13 +400,14 @@ def trigger_update():
     return jsonify({"status": "updated"}), 200
 
 def signal_handler(sig, frame):
-    print('Shutting down...')
+    logging.info('Shutting down...')
     sys.exit(0)
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)  # Handle Ctrl+C
+    logging.info("Starting probe script.")
     # Login to the server before starting the probe loop
-    login()                                                        
+    login()
 
     # Run the Flask app in a separate thread
     Thread(target=lambda: app.run(host='0.0.0.0', port=5001)).start()
