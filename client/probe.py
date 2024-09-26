@@ -1,4 +1,3 @@
-import subprocess
 import sys
 import os
 import platform
@@ -21,6 +20,7 @@ min_interval = 60  # Minimum interval in seconds (1 minute)
 max_interval = 600  # Maximum interval in seconds (10 minutes)
 SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'default_fallback_key')  # Replace 'default_fallback_key' with a real key in production
 SERVER_FILE = "server.txt"
+server_port = "5454"
 
 # Variable to store the current reporting interval
 reporting_interval = DEFAULT_INTERVAL
@@ -28,26 +28,8 @@ reporting_interval = DEFAULT_INTERVAL
 # Admin-set frequency via API
 admin_set_interval = None
 
-# List of external packages to ensure they are installed
-required_packages = [
-    "psutil",
-    "getmac",
-    "requests",
-    "flask"
-]
-
-def install(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-# Install missing packages
-for package in required_packages:
-    try:
-        __import__(package)
-    except ImportError:
-        install(package)
-
 app = Flask(__name__)
-SERVER_URL = "https://127.0.0.1:8080/update"
+SERVER_URL = f"https://127.0.0.1:{server_port}/update"
 DEFAULT_INTERVAL = 300  # Default interval (5 minutes)
 min_interval = 60  # Minimum interval in seconds (1 minute)
 max_interval = 600  # Maximum interval in seconds (10 minutes)
@@ -76,7 +58,7 @@ def get_ip_address():
 def login():
     global JWT_TOKEN
     server_ip = discover_server_ip()
-    LOGIN_URL = f"https://{server_ip}:8080/login"    
+    LOGIN_URL = f"https://{server_ip}:{server_port}/login"    
 
     try:
         response = requests.post(LOGIN_URL, json={"username": "admin", "password": "password"}, verify='server-cert.pem')  # Assuming self-signed cert
@@ -188,7 +170,7 @@ def discover_server_ip():
 def update_server_url():
     server_ip = discover_server_ip()        
     if server_ip:
-        return f"https://{server_ip}:8080/update"
+        return f"https://{server_ip}:{server_port}/update"
     else:
         print("Using default server URL.")
         return SERVER_URL  # Fallback to default server URL

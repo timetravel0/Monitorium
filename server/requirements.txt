@@ -1,0 +1,7 @@
+Flask
+Flask-SocketIO
+psutil
+getmac
+requests
+PyJWT
+cachetools

@@ -358,5 +358,5 @@ if __name__ == '__main__':
     discovery_thread.start()
 
     #socketio.run(app, debug=True, host='0.0.0.0', port=8080)
-    socketio.run(app, debug=True, host='0.0.0.0', port=8080, ssl_context=('cert.pem', 'key.pem'), allow_unsafe_werkzeug=True)
+    socketio.run(app, debug=True, host='0.0.0.0', port=5454, ssl_context=('cert.pem', 'key.pem'), allow_unsafe_werkzeug=True)
                                                        
