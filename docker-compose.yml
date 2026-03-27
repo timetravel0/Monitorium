@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  monitorium-server:
+    build:
+      context: ./server
+    container_name: monitorium-server
+    env_file:
+      - .env
+    environment:
+      DATABASE_PATH: /data/local_data.db
+      SERVER_PORT: 5454
+      FLASK_DEBUG: "false"
+      CLIENT_INSTALLER_PATH: /app/client-installer/ClientServiceSetup.exe
+    ports:
+      - "5454:5454"
+      - "5002:5002/udp"
+    volumes:
+      - monitorium_data:/data
+      - ./client/distribution/windows/output:/app/client-installer:ro
+    restart: unless-stopped
+
+volumes:
+  monitorium_data:

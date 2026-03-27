@@ -22,7 +22,7 @@
         google.charts.load('current', {'packages':['gauge']});
 
         // Initialize Socket.io
-        var socket = io.connect('https://' + document.domain + ':' + location.port);
+        var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
 
         // Listen for updates
         socket.on('update_received', function() {
@@ -159,6 +159,9 @@
  <!-- Header with centered title -->
         <div class="header">
             <h1 class="my-4">Network Dashboard</h1>
+            <form method="post" action="/logout" class="d-inline">
+                <button type="submit" class="btn btn-outline-secondary btn-sm">Logout</button>
+            </form>
         </div>
 
         <!-- Theme Switcher -->

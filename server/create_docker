@@ -1,0 +1,2 @@
+docker build -t server-app .
+docker run -d -p 5454:5454 server-app:latest

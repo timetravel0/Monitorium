@@ -1,74 +1,120 @@
-# Monitorium
-Lightweight, real-time system and network monitoring tool. It features a client-side probe that gathers system metrics and a server-side dashboard that displays the data in a clean, interactive interface. Designed to provide insights on CPU, memory, disk, and network usage, Monitorium helps you keep track of your local infrastructure health.
+# Monitorium Workspace
 
-- Real-time Monitoring: Continuous monitoring of CPU, memory, disk usage, and network I/O, providing real-time metrics for connected clients.
-- Automated Server Discovery: Clients automatically discover the server via network broadcast, simplifying the setup process.
-- Client-Side Control Actions: The server can issue client-side control actions such as reboot and shutdown, securely authenticated with JWT tokens.
-- Interactive Dashboard: A web-based dashboard provides real-time updates on client status, including process and port information.
-- Detailed Process and Port Monitoring: Clients send detailed lists of running processes and active network ports to the server for centralized monitoring.
-- Customizable Update Intervals: Update intervals for monitoring data can be customized dynamically based on system load or administrator preferences.
-- Automated Client Updates: Clients automatically update to the latest version when a new probe version is available on the server.
-- Built with Flask, Socket.IO, and SQLite: The system uses Flask for the backend, Socket.IO for real-time communication, and SQLite for lightweight data storage.
-- JWT-Based Authentication: Secure authentication using JWT tokens between the server and clients ensures only authenticated actions (such as reboot or shutdown) are allowed.
-- Server-to-Client Handshake: Before any action (like reboot) is performed, the server securely logs into the client to obtain a JWT token, ensuring authenticated requests.
-- Token Validation on Clients: Clients validate incoming requests from the server by verifying JWT tokens, ensuring actions are performed only by trusted servers.
-- SSL/TLS Support: Secure communication between server and clients is supported using SSL/TLS to prevent man-in-the-middle attacks during data transfer.
-- Environment-Based Credential Management: Server and client login credentials are securely managed using environment variables, reducing the risk of hardcoded secrets.
+Monitorium is a multi-project workspace for host monitoring and remote control.
+It contains:
 
-## Getting Started
+- `server/`: central Flask dashboard and API
+- `client/`: local probe plus launcher used on monitored hosts
 
-### Prerequisites
+The two projects communicate through HTTP(S) and UDP discovery. The server stores
+host state in SQLite and exposes a dashboard, while the client probe collects host
+metrics and accepts control requests.
 
-Ensure you have the following dependencies installed:
+## Workspace Documents
 
-- Python 3.x
-- Flask
-- psutil
-- getmac
-- requests
-- Flask-SocketIO
-- SQLite3
+- [`docs/WORKSPACE_OVERVIEW.md`](docs/WORKSPACE_OVERVIEW.md)
+- [`docs/CROSS_PROJECT_ARCHITECTURE.md`](docs/CROSS_PROJECT_ARCHITECTURE.md)
+- [`docs/MASTER_IMPROVEMENT_ROADMAP.md`](docs/MASTER_IMPROVEMENT_ROADMAP.md)
 
-## Installation
+Project-level documentation is under each project root:
 
-### Clone the repository:
+- [`server/docs/`](server/docs)
+- [`client/docs/`](client/docs)
 
-git clone https://github.com/timetravel0/Monitorium.git
-cd monitorium
+## Security Baseline
 
-### Run the server:
+The workspace requires explicit credentials and secrets via environment variables.
+No default admin credentials or fallback JWT secret are used.
+
+Required variables observed in the code:
+
+- `JWT_SECRET_KEY`
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD`
+- `FLASK_SECRET_KEY`
+
+Use [`.env.example`](.env.example) as the starting point for runtime configuration.
+
+## Ports
+
+- Server dashboard/API: `5454` by default
+- Probe API on monitored hosts: `5001`
+- UDP discovery: `5002`
+
+## Quick Start
+
+1. Install server dependencies:
+
+```bash
+cd server
+pip install -r requirements.txt
+```
+
+2. Set the required environment variables.
+
+3. Start the server:
 
 ```bash
 python app.py
 ```
 
-This will start the Flask server for the dashboard.
-
-### Run the client probe:
-
-On the target machine you want to monitor, run:
+4. On each monitored machine, start the launcher:
 
 ```bash
+cd client
 python launcher.py
 ```
 
-The client will discover the server automatically and begin sending system metrics.
+## Dashboard Access
 
-## Usage
+Open:
 
-- **Dashboard:** Navigate to `http://localhost:8080` to view the dashboard.
-- **Client Actions:** You can initiate reboots or shutdowns of client machines directly from the dashboard.
+- `https://<server-ip>:5454/`
 
-## Configuration
+The dashboard requires login using `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
 
-You can customize the update interval and discovery settings by modifying the `probe.py` file:
+## Docker
 
-```python
-# Modify the probe interval (default is 5 minutes)
-time.sleep(300)  # 300 seconds = 5 minutes
+The server can be built and run with Docker:
+
+```bash
+cd server
+docker build -t server-app .
+docker run -d -p 5454:5454 \
+  -e JWT_SECRET_KEY=... \
+  -e ADMIN_USERNAME=... \
+  -e ADMIN_PASSWORD=... \
+  -e FLASK_SECRET_KEY=... \
+  server-app:latest
 ```
 
-## Troubleshooting
+From the repository root, the provided compose file starts the server and persists
+the SQLite database on a named volume:
 
-- If the server discovery fails, make sure both the client and server are on the same network.
-- Ensure no firewall is blocking communication on ports 5001 (client) and 8080 (server).
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+The compose setup exposes:
+
+- `5454/tcp` for the dashboard/API
+- `5002/udp` for discovery
+
+## Tests
+
+Run the server API tests:
+
+```bash
+cd server
+pip install -r requirements.txt -r requirements-dev.txt
+pytest -q
+```
+
+## Notes
+
+- If TLS certificates are not present, the server starts without TLS and logs a warning.
+- The client and server probe implementations are duplicated across `client/probe.py`
+  and `server/probe.py`; this is an important maintenance risk.
+- Auth endpoints and control endpoints are rate-limited, and actions are written to
+  `audit_log` in SQLite.

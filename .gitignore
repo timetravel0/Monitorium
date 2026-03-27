@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.pem
+
+# Local runtime data
+*.db
+*.sqlite
+server/local_data.db
+
+# Environment files
+.env
+.env.*
+
+# Build artifacts
+client/distribution/windows/build/
+client/distribution/windows/dist/
+client/distribution/windows/output/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
